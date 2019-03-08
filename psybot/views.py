@@ -7,6 +7,7 @@ import json
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from psybot.models import Userinfo, Activityinfo, Speechinfo, Emotioninfo
+from psybot.utils.OpenidUtils import OpenidUtils
 
 
 def index(request):
@@ -24,7 +25,8 @@ def calculate(request):
 
 @csrf_exempt
 def register(request):
-    mopenid = request.GET['openid']
+    mcode = request.GET['code']
+    mopenid = OpenidUtils(mcode).get_openid()
     mnickname = request.GET['nickname']
     mportrait = request.GET['portrait']
     try:
@@ -38,7 +40,7 @@ def register(request):
         code = '0'
     mactivityinfo = Activityinfo(user=muser)
     mactivityinfo.save()
-    result = {"code": code, "msg": "success", "data": []}
+    result = {"code": code, "msg": "success", "data": [{"openid": mopenid}]}
     return HttpResponse(json.dumps(result))
 
 @csrf_exempt
