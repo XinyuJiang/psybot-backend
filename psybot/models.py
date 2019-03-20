@@ -30,10 +30,15 @@ class Speechinfo(models.Model):
 class Emotioninfo(models.Model):
     user = models.ForeignKey(Userinfo, on_delete=models.CASCADE)
     awake = models.IntegerField(null=True, blank=True)
-    content = models.CharField(max_length=300)
     create_time = models.DateField(auto_now_add=True)
     efficient = models.CharField(max_length=30)
     belief = models.CharField(max_length=50)
+    activity = models.CharField(max_length=300)
+    mind = models.CharField(max_length=300)
+    contenta = models.CharField(max_length=300)
+    contentb = models.CharField(max_length=300)
+    contentm = models.CharField(max_length=300)
+
 
 
 class Psychologist (models.Model):

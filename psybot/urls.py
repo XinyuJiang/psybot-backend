@@ -3,6 +3,8 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    path('emotion_analyze/', views.emotion_analyze, name='emotion_analyze'),
+    path('biclassifyemotion/', views.biclassifyemotion, name='biclassifyemotion'),
     path('setemotion/', views.setemotion, name='setemotion'),
     path('classifytext/', views.classifytext, name='classifytext'),
     path('emotionevaluate/', views.emotionevaluate, name='emotionevaluate'),

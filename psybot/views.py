@@ -1,3 +1,6 @@
+import datetime
+import random
+
 import numpy as np
 import pandas as pd
 import math
@@ -7,11 +10,15 @@ import json
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from psybot.models import Userinfo, Activityinfo, Speechinfo, Emotioninfo
-from psybot.utils.OpenidUtils import OpenidUtils
+from psybot.utils.NlpUtils import *
+from psybot.utils.OpenidUtils import *
+from psybot.utils.Const import *
+
+iddict = {}
 
 
 def index(request):
-    return HttpResponse("Hello, world. You're at the polls index.")
+    return HttpResponse("Hello, world. You're at the Psybot index.")
 
 
 def calculate(request):
@@ -27,6 +34,7 @@ def calculate(request):
 def register(request):
     mcode = request.GET['code']
     mopenid = OpenidUtils(mcode).get_openid()
+    # iddict[mcode] = mopenid #将code：openid键值对
     mnickname = request.GET['nickname']
     mportrait = request.GET['portrait']
     try:
@@ -43,6 +51,7 @@ def register(request):
     result = {"code": code, "msg": "success", "data": [{"openid": mopenid}]}
     return HttpResponse(json.dumps(result))
 
+
 @csrf_exempt
 def setspeech(request):
     mtext = request.GET['text']
@@ -58,19 +67,19 @@ def setspeech(request):
     return HttpResponse(json.dumps(result))
 
 
-#根据效价判断是否需要干预
+# 根据效价判断是否需要干预
 @csrf_exempt
 def emotionevaluate(request):
     mefficient = request.GET['efficient']
     if int(mefficient) < 4:
-        code = '1'    #需要干预
+        code = '1'  # 需要干预
     else:
-        code = '0'    #不需要干预
+        code = '0'  # 不需要干预
     result = {"code": code, "msg": "success", "data": []}
     return HttpResponse(json.dumps(result))
 
 
-#文本分类
+# 文本分类---信念判断
 @csrf_exempt
 def classifytext(request):
     def loadfile(mfile):
@@ -82,7 +91,7 @@ def classifytext(request):
                 rtndata.append([item for item in load_data[k].keys()])
         return rtndata
 
-    mfile = 'E:\\study\\program\\Psybot\\data.json'
+    mfile = trainbeliefdata
     data = loadfile(mfile)
 
     l0 = 13
@@ -94,35 +103,8 @@ def classifytext(request):
     l6 = 13
     l7 = 13
 
-    def tokenizer(text):
-        stopwords_file = "E:\\study\\data\\停用词表stopwords\\哈工大停用词表.txt"
-        stop_f = open(stopwords_file, "r", encoding='utf-8')
-        stop_words = []
-        for line in stop_f.readlines():
-            line = line.strip()
-            if not len(line):
-                continue
-            stop_words.append(line)
-        stop_f.close
-        # print("length of stop_words:",len(stop_words))
-
-        return_list = []
-        for each in text:
-            outstr = ''
-            seg_list = jieba.cut(each, HMM=False)
-            for word in seg_list:
-                if word not in stop_words:
-                    return_list.append(word)
-        #                 if word != '\t':
-        #                     outstr += word
-        #                     outstr += " "
-        #         #seg_list = " ".join(seg_list)
-        #         #print(outstr.strip())
-        #         return_list.append(outstr.strip())
-        return return_list
-
     def fileextraction(data):
-        # 存储对应label的邮件的words分布
+        # 存储对应label的词的words分布
         label0dict = {}
         label1dict = {}
         label2dict = {}
@@ -132,9 +114,17 @@ def classifytext(request):
         label6dict = {}
         label7dict = {}
 
+        # print("data", data)
+
         for i in range(len(data)):
             temp = tokenizer(data[i])
-            textset = set(temp)
+            # 扁平化操作
+            textset = []
+            for sentence in temp:
+                for word in sentence:
+                    textset.append(word)
+            textset = set(textset)
+            # print("textset:", textset)
             for word in textset:
                 if i == 0:
                     if word in label0dict:
@@ -176,9 +166,11 @@ def classifytext(request):
                         label7dict[word] += 1
                     else:
                         label7dict[word] = 1
+        # print("label1dict:", label1dict)
         return [label0dict, label1dict, label2dict, label3dict, label4dict, label5dict, label6dict, label7dict]
 
     labeldict = fileextraction(data)
+    print("labeldict:", labeldict)
 
     def sort_by_value(d):
         items = d.items()
@@ -199,15 +191,12 @@ def classifytext(request):
         p7 = math.log(sumlen / l7)
 
         # p1 = 1
-        # print(email)
         # 采用1-Laplace变换
         # 取对数来避免下溢的问题
         seg_list = jieba.cut(text, HMM=False)
         for word in seg_list:
+            # print("word:", word)
             if word in labeldict[0].keys():
-                # if returnlist[1][email[i]] < 1500 and email[i] in returnlist[3] and returnlist[3][email[i]] < 1500:
-                # print(returnlist[1][email[i]])
-                # if word in labeldict.keys():
                 p0 += math.log(1.0 * (len(labeldict[0])) / (labeldict[0][word] + 1))
             else:
                 p0 += math.log(len(labeldict[0]))
@@ -247,15 +236,6 @@ def classifytext(request):
             else:
                 p7 += math.log(len(labeldict[7]))
 
-        #         plabel0 = -p1
-        #         plabel1 = -p3
-        #         #print(plabel0, plabel1)
-        #         if plabel0 > plabel1 and email[0] != '0':
-        #             miss += 1
-        #         elif plabel0 < plabel1 and email[0] != '1':
-        #             miss += 1
-        # print(p0,p1,p2,p3,p4,p5,p6)
-        # pi = [0,1,2,3,4,5,6,7]
         a = {"0": p0, "1": p1, "2": p2, "3": p3, "4": p4, "5": p5, "6": p6, "7": p7}
         return sort_by_value(a)
 
@@ -264,19 +244,90 @@ def classifytext(request):
     return HttpResponse(json.dumps(result))
 
 
-#建立用户本次交流的情绪信息表
+# 建立用户本次交流的情绪信息表
 @csrf_exempt
 def setemotion(request):
     mopenid = request.GET['openid']
     mefficient = request.GET['efficient']
     mawake = request.GET['awake']
     mbelief = request.GET['belief']
-    mcontent = request.GET['content']
+    mactivity = request.GET['activity']
+    mmind = request.GET['mind']
+    mcontenta = request.GET['ContentA']
+    mcontentb = request.GET['ContentB']
+    mcontentm = request.GET['ContentM']
+
     muser = Userinfo.objects.get(openid=mopenid)
-    memotioninfo = Emotioninfo(user=muser, awake=mawake, belief=mbelief, content=mcontent, efficient=mefficient)
+    memotioninfo = Emotioninfo(user=muser, awake=mawake, belief=mbelief, efficient=mefficient, activity=mactivity, mind=mmind, contenta=mcontenta, contentb=mcontentb, contentm=mcontentm)
     memotioninfo.save()
     print("情绪信息存储成功")
     code = '0'
     result = {"code": code, "msg": "success", "data": []}
+    return HttpResponse(json.dumps(result))
+
+
+# 冥想反馈
+@csrf_exempt
+def setmind(request):
+    mopenid = request.GET['openid']
+    mtype = request.GET['type']
+    mbegintime = request.GET['awake']
+    mendtime = request.GET['belief']
+    mresponse = request.GET['content']
+    # muser = Userinfo.objects.get(openid=mopenid)
+    # memotioninfo = Emotioninfo(user=muser, awake=mawake, belief=mbelief, content=mcontent, efficient=mefficient)
+    # memotioninfo.save()
+    print("情绪信息存储成功")
+    code = '0'
+    result = {"code": code, "msg": "success", "data": []}
+    return HttpResponse(json.dumps(result))
+
+
+# 判断文本积极或消极
+@csrf_exempt
+def biclassifyemotion(request):
+    def predicttext(text):
+        neg_dict = loadfile(neg_emotiondict)
+        pos_dict = loadfile(pos_emotiondict)
+        neg_count = 0
+        pos_count = 0
+        print("dict:", neg_dict, pos_dict)
+        # print(tokenizer(text)[0])
+        for item in tokenizer(text)[0]:
+            print("item:", item)
+            if item in neg_dict:
+                neg_count += 1
+            if item in pos_dict:
+                pos_count += 1
+        print("pos:neg", pos_count, neg_count)
+        # 0表示负数
+        if neg_count > pos_count:
+            return 0
+        if pos_count > neg_count:
+            return 1
+        # 相等则随机判断
+        return random.choice('01')
+
+    text = request.GET['text']
+    print(text)
+    result = {"code": 0, "msg": "success", "data": predicttext([text])}
+    return HttpResponse(json.dumps(result))
+
+
+# 情绪分析报告生成
+@csrf_exempt
+def emotion_analyze(request):
+    mopenid = request.GET['openid']
+    muser = Userinfo.objects.get(openid=mopenid)
+    #找到近五天的数据
+    i = datetime.datetime.now()-datetime.timedelta(days=5)
+    q = Emotioninfo.objects.filter(
+        user=muser
+    ).filter(create_time__gte=datetime.date(i.year, i.month, i.day))
+    #输出近五天的记录的效价
+    rlist = []
+    for item in q:
+        rlist.append(item.efficient)
+    result = {"code": 0, "msg": "success", "data": rlist}
     return HttpResponse(json.dumps(result))
 
