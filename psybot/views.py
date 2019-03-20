@@ -9,12 +9,10 @@ import jieba
 import json
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
-from psybot.models import Userinfo, Activityinfo, Speechinfo, Emotioninfo
+from psybot.models import Userinfo, Activityinfo, Speechinfo, Emotioninfo, Mingxianginfo
 from psybot.utils.NlpUtils import *
 from psybot.utils.OpenidUtils import *
 from psybot.utils.Const import *
-
-iddict = {}
 
 
 def index(request):
@@ -71,6 +69,13 @@ def setspeech(request):
 @csrf_exempt
 def emotionevaluate(request):
     mefficient = request.GET['efficient']
+    mopenid = request.GET['openid']
+
+    muser = Userinfo.objects.get(openid=mopenid)
+    memotioninfo = Emotioninfo(user=muser, efficient=mefficient)
+    memotioninfo.save()
+    print("情绪信息存储成功")
+
     if int(mefficient) < 4:
         code = '1'  # 需要干预
     else:
@@ -326,8 +331,47 @@ def emotion_analyze(request):
     ).filter(create_time__gte=datetime.date(i.year, i.month, i.day))
     #输出近五天的记录的效价
     rlist = []
+    tlist = []
     for item in q:
         rlist.append(item.efficient)
-    result = {"code": 0, "msg": "success", "data": rlist}
+        tlist.append(item.create_time)
+    result = {"code": 0, "msg": "success", "data": [rlist, tlist]}
+    return HttpResponse(json.dumps(result))
+
+# 建立用户的冥想信息表
+@csrf_exempt
+def setmingxiang(request):
+    mopenid = request.GET['openid']
+    mstart = request.GET['mingxiang_start']
+    mend = request.GET['mingxiang_end']
+    mtype = request.GET['mingxiang_type']
+    mresponse = request.GET['mingxiang_response']
+
+    muser = Userinfo.objects.get(openid=mopenid)
+    mmingxianginfo = Mingxianginfo(user=muser, mingxiang_start=mstart, mingxiang_end=mend, mingxiang_type=mtype, mingxiang_response=mresponse)
+    mmingxianginfo.save()
+    print("冥想信息存储成功")
+    code = '0'
+    result = {"code": code, "msg": "success", "data": []}
+    return HttpResponse(json.dumps(result))
+
+
+# 统计指定用户的平均冥想时间
+@csrf_exempt
+def calcmingxiang(request):
+    mopenid = request.GET['openid']
+
+    rlist = [0,0,0,0,0,0,0]
+    mtype = ["呼吸练习", "晚间冥想", "晨间冥想", "行走冥想", "乘车冥想", "正念减肥", "缓解焦虑"]
+    muser = Userinfo.objects.get(openid=mopenid)
+    mset = Mingxianginfo.objects.filter(user=muser)
+    for t in range(len(mtype)):
+        itemset = mset.filter(mingxiang_type=mtype[t])
+        #print(len(itemset))
+        for item in itemset:
+            #print(item.mingxiang_end, item.mingxiang_start)
+            rlist[t] += (item.mingxiang_end-item.mingxiang_start).days
+    code = '0'
+    result = {"code": code, "msg": "success", "data": rlist}
     return HttpResponse(json.dumps(result))
 
