@@ -1,5 +1,7 @@
 import datetime
+import os
 import random
+import time
 
 import numpy as np
 import pandas as pd
@@ -7,12 +9,15 @@ import math
 from math import *
 import jieba
 import json
+
+from django.db.models import Avg
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from psybot.models import Userinfo, Activityinfo, Speechinfo, Emotioninfo, Mingxianginfo
 from psybot.utils.NlpUtils import *
 from psybot.utils.OpenidUtils import *
 from psybot.utils.Const import *
+import matplotlib.pyplot as plt
 
 
 def index(request):
@@ -375,3 +380,39 @@ def calcmingxiang(request):
     result = {"code": code, "msg": "success", "data": rlist}
     return HttpResponse(json.dumps(result))
 
+
+#返回效价统计信息
+@csrf_exempt
+def user_stat(request):
+    print(request.GET["user_id"])
+    if "user_id" not in request.GET:
+        return HttpResponse(json.dumps({"code":-1, "msg":"unexpected params!", "data":[]}))
+    # info = Emotioninfo.objects.filter(user_id=request.GET['user_id']).values('create_time','efficient')
+    info = Emotioninfo.objects.filter(user_id=request.GET['user_id']).values('create_time').annotate(avg=Avg('efficient')).values('create_time','avg')
+    #print(info)
+    time_list=[rst['create_time'].strftime("%Y-%m-%d") for rst in info]
+    efficient_list = [rst['avg'] for rst in info]
+    #print(time_list)
+    plt.plot(time_list,efficient_list)
+    plt.xlabel("time")
+    plt.ylabel("efficient")
+    name=time.strftime('%Y%m%d%H%M%S_',time.localtime(time.time()))+request.GET['user_id']
+    if not os.path.exists("./media/temp/"):
+        os.makedirs("./media/temp/")
+    plt.savefig("./media/temp/"+name+".png")
+    return HttpResponse(json.dumps({"code":0,"msg":"success","data":{"url":"https://xinyujiang.cn/media/temp/"+name+".png"}}))
+
+
+#返回userid
+@csrf_exempt
+def getuserid(request):
+    #print(request.GET["user_id"])
+
+    if "openid" not in request.GET:
+        return HttpResponse(json.dumps({"code":-1, "msg":"unexpected params!", "data":[]}))
+    mopenid = request.GET['openid']
+    muser = Userinfo.objects.get(openid=mopenid)
+    user_id = muser.id
+    code = '0'
+    result = {"code": code, "msg": "success", "data": user_id}
+    return HttpResponse(json.dumps(result))
