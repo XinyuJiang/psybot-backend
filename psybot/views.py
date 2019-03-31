@@ -364,17 +364,15 @@ def setmingxiang(request):
 # 统计指定用户的平均冥想时间
 @csrf_exempt
 def calcmingxiang(request):
-    mopenid = request.GET['openid']
-
     rlist = [0,0,0,0,0,0,0]
     mtype = ["呼吸练习", "晚间冥想", "晨间冥想", "行走冥想", "乘车冥想", "正念减肥", "缓解焦虑"]
-    muser = Userinfo.objects.get(openid=mopenid)
+    muser = Userinfo.objects.get(id=request.GET['user_id'])
     mset = Mingxianginfo.objects.filter(user=muser)
     for t in range(len(mtype)):
         itemset = mset.filter(mingxiang_type=mtype[t])
         #print(len(itemset))
         for item in itemset:
-            #print(item.mingxiang_end, item.mingxiang_start)
+            print(item.mingxiang_end, item.mingxiang_start)
             rlist[t] += (item.mingxiang_end-item.mingxiang_start).days
     code = '0'
     result = {"code": code, "msg": "success", "data": rlist}
@@ -388,7 +386,7 @@ def user_stat(request):
     if "user_id" not in request.GET:
         return HttpResponse(json.dumps({"code":-1, "msg":"unexpected params!", "data":[]}))
     # info = Emotioninfo.objects.filter(user_id=request.GET['user_id']).values('create_time','efficient')
-    info = Emotioninfo.objects.filter(user_id=request.GET['user_id']).values('create_time').annotate(avg=Avg('efficient')).values('create_time','avg')
+    info = Emotioninfo.objects.filter(user_id=request.GET['user_id'], efficient__gte=0).values('create_time').annotate(avg=Avg('efficient')).values('create_time','avg')
     #print(info)
     time_list=[rst['create_time'].strftime("%Y-%m-%d") for rst in info]
     efficient_list = [rst['avg'] for rst in info]

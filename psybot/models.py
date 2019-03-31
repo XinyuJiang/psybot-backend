@@ -30,7 +30,7 @@ class Speechinfo(models.Model):
 class Emotioninfo(models.Model):
     user = models.ForeignKey(Userinfo, on_delete=models.CASCADE)
     awake = models.IntegerField(null=True, blank=True)
-    create_time = models.DateTimeField(auto_now_add=True)
+    create_time = models.DateField(auto_now_add=True)
     efficient = models.CharField(max_length=30)
     belief = models.CharField(max_length=50, null=True, blank=True)
     activity = models.CharField(max_length=300, null=True, blank=True)
