@@ -88,3 +88,8 @@ class Mingxianginfo(models.Model):
     mingxiang_end = models.DateTimeField()
     mingxiang_response = models.CharField(max_length=500)
 
+class Opinioninfo(models.Model):
+    user = models.ForeignKey(Userinfo, on_delete=models.CASCADE)
+    text = models.CharField(max_length=500)
+    title = models.CharField(max_length=100)
+
