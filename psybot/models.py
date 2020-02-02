@@ -11,6 +11,8 @@ class Userinfo(models.Model):
     age = models.IntegerField(null=True, blank=True)
     department = models.CharField(max_length=50, null=True, blank=True)
     email = models.CharField(max_length=50, null=True, blank=True)
+    hashid = models.CharField(max_length=20, null=True, blank=True)
+
 
 
 # 存储用户打开程序时间，关闭程序时间
@@ -93,3 +95,14 @@ class Opinioninfo(models.Model):
     text = models.CharField(max_length=500)
     title = models.CharField(max_length=100)
 
+
+class Test_situation(models.Model):
+    user = models.ForeignKey(Userinfo, on_delete=models.CASCADE)
+    create_time = models.DateField(auto_now_add=True)
+    test_grade = models.IntegerField(null=True, blank=True)
+
+
+class OpinioninfoForSRT(models.Model):
+    user = models.CharField(max_length=200)
+    text = models.CharField(max_length=500)
+    title = models.CharField(max_length=100)

@@ -3,6 +3,9 @@ import os
 import random
 import time
 
+import sys
+import random
+import pickle
 import numpy as np
 import pandas as pd
 import math
@@ -14,14 +17,22 @@ import json
 from django.db.models import Avg
 from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
-from psybot.models import Userinfo, Activityinfo, Speechinfo, Emotioninfo, Mingxianginfo, Opinioninfo
+from psybot.models import Userinfo, Activityinfo, Speechinfo, Emotioninfo, Mingxianginfo, Opinioninfo, Test_situation, OpinioninfoForSRT
 from psybot.utils.NlpUtils import *
 from psybot.utils.OpenidUtils import *
 from psybot.utils.Const import *
 import matplotlib.pyplot as plt
 import matplotlib as  mpl
+from matplotlib.font_manager import FontProperties
+import hashlib
+from django_redis import get_redis_connection
 
 
+from scipy.misc import imread  # 这是一个处理图像的函数
+from wordcloud import WordCloud, STOPWORDS, ImageColorGenerator
+import matplotlib.pyplot as plt
+
+import tensorflow as tf
 
 def index(request):
     return HttpResponse("Hello, world. You're at the Psybot index.")
@@ -39,22 +50,36 @@ def calculate(request):
 @csrf_exempt
 def register(request):
     mcode = request.GET['code']
-    mopenid = OpenidUtils(mcode).get_openid()
+    mopenid,msession_key = OpenidUtils(mcode).get_openid()#从前端得到code，加上appid和appsecret才能得到openid和session_key. 前端无法直接访问得到openid的接口因为需要appid和appsecret，而这两个东西很重要，放在前端容易被反编译，因此必须要从后端调用。
+    #mopenid = mcode
+    #msession_key = mcode
     # iddict[mcode] = mopenid #将code：openid键值对
     mnickname = request.GET['nickname']
     mportrait = request.GET['portrait']
+     # 生成自定义登录态，返回给前端
+    sha = hashlib.sha1()
+    sha.update(mopenid.encode())
+    sha.update(msession_key.encode())
+    digest = sha.hexdigest()
     try:
         muser = Userinfo.objects.get(openid=mopenid)
         print(muser.nickname, "登录成功")
         code = '1'
+        msg = "login successful"
     except:
         muser = Userinfo(openid=mopenid, nickname=mnickname, portrait=mportrait)
         muser.save()
+        muser.hashid = hex(hash(str(muser.id))%(16*16*16*16*16*16))
+        muser.save()
         print("注册成功")
         code = '0'
+        msg = "register successful"
+    # 将自定义登录态保存到缓存中, 两个小时过期
+    #conn = get_redis_connection('default')
+    #conn.set(digest, muser.id, ex=2*60*60)
     mactivityinfo = Activityinfo(user=muser)
     mactivityinfo.save()
-    result = {"code": code, "msg": "success", "data": {"openid": mopenid}}
+    result = {"code": code, "msg": msg, "data": {"openid": mopenid}}
     return HttpResponse(json.dumps(result))
 
 
@@ -67,7 +92,10 @@ def setspeech(request):
     mspeechinfo = Speechinfo(user=muser, text=mtext, label=mlabel)
     mspeechinfo.save()
     print("文本存储成功")
-    code = '0'
+    if mlabel == 1 or mlabel == 0:
+        code = '0'
+    else:
+        code = '1'
     result = {"code": code, "msg": "success", "data": []}
     return HttpResponse(json.dumps(result))
 
@@ -501,13 +529,10 @@ def daysrecord(request):
     a = datetime.datetime.now()
     b = datetime.datetime(a.year,a.month,a.day)
     c = datetime.datetime(signinfo[0].open_time.year,signinfo[0].open_time.month,signinfo[0].open_time.day)
-    #print(b,c)
-    #print((b-c).days)
-    #print(datetime.datetime.now()-item.open_time)
-    #print((datetime.datetime.now()-item.open_time).days)
-    data = [(b-c).days]
     code = '0'
-    result = {"code": code, "msg": "get daysrecord successful", "data": data}
+    mspeechinfo = Speechinfo.objects.filter(user=muser)
+    textlen = len(mspeechinfo)
+    result = {"code": code, "msg": "get daysrecord successful", "data": {"days":(b-c).days, "text": textlen }}
     return HttpResponse(json.dumps(result))
 
 
@@ -517,15 +542,15 @@ def paper_list(request):
     count = []
     count.append({'id':0,'title':'都2019年了，你还以为心理咨询就是闲聊天？','time':'2019.3.31','image':'https://xinyujiang.cn/media/paper/image/0.jpg','src':'https://mp.weixin.qq.com/s/1_HXUsO72xbTPhJ_ieQ4Ew'})
     count.append({'id':1,'title':'微博上线「仅半年可见」功能：现代人究竟在隐藏什么','time':'2019.4.6','image':'https://xinyujiang.cn/media/paper/image/1.jpg','src':'https://mp.weixin.qq.com/s/IBiHytiXPTTkanHX5qEiwQ'})
-    count.append({'id':2,'title':'都2019年了，你还以为心理咨询就是闲聊天？','time':'2019.4.12','image':'https://xinyujiang.cn/media/paper/image/2.jpg','src':'https://mp.weixin.qq.com/s/QFSFgAXXKlUWGBb0YWqg2g'})
-    count.append({'id':3,'title':'都2019年了，你还以为心理咨询就是闲聊天？','time':'2019.4.16','image':'https://xinyujiang.cn/media/paper/image/3.jpg','src':'https://mp.weixin.qq.com/s/qxEbeAlE3sbET4252JEHEg'})
-    count.append({'id':4,'title':'都2019年了，你还以为心理咨询就是闲聊天？','time':'2019.4.20','image':'https://xinyujiang.cn/media/paper/image/4.jpg','src':'https://mp.weixin.qq.com/s/Nnm8OunFfHROJK283OS_IQ'})
-    count.append({'id':5,'title':'都2019年了，你还以为心理咨询就是闲聊天？','time':'2019.4.25','image':'https://xinyujiang.cn/media/paper/image/5.jpg','src':'https://mp.weixin.qq.com/s/ckAq9iOEDc8CbHi6go8vmA'})
-    count.append({'id':6,'title':'都2019年了，你还以为心理咨询就是闲聊天？','time':'2019.4.30','image':'https://xinyujiang.cn/media/paper/image/6.jpg','src':'https://mp.weixin.qq.com/s/YIcvFt79VE6c8sEJIgYhkQ'})
-    count.append({'id':7,'title':'都2019年了，你还以为心理咨询就是闲聊天？','time':'2019.5.6','image':'https://xinyujiang.cn/media/paper/image/7.jpg','src':'https://mp.weixin.qq.com/s/GUpA-4SRfFy43fRnJUA88A'})
-    count.append({'id':8,'title':'都2019年了，你还以为心理咨询就是闲聊天？','time':'2019.5.24','image':'https://xinyujiang.cn/media/paper/image/8.jpg','src':'https://mp.weixin.qq.com/s/8cdOPjls-3Lwlk4TK_oB0g'})
-    count.append({'id':9,'title':'都2019年了，你还以为心理咨询就是闲聊天？','time':'2019.6.3','image':'https://xinyujiang.cn/media/paper/image/9.jpg','src':'https://mp.weixin.qq.com/s/-QFCsYOhEONUyEDaK0_GZw'})
-    count.append({'id':10,'title':'都2019年了，你还以为心理咨询就是闲聊天？','time':'2019.6.10','image':'https://xinyujiang.cn/media/paper/image/10.jpg','src':'https://mp.weixin.qq.com/s/2wls4rZ7cdW1l13cNnWuJw'})    
+    count.append({'id':2,'title':'【Psy.Cheese第一弹】薪水低？压力来背锅！','time':'2019.4.12','image':'https://xinyujiang.cn/media/paper/image/2.jpg','src':'https://mp.weixin.qq.com/s/QFSFgAXXKlUWGBb0YWqg2g'})
+    count.append({'id':3,'title':'吃玉米也能上热搜？王思聪竟成新一代爆款IP','time':'2019.4.16','image':'https://xinyujiang.cn/media/paper/image/3.jpg','src':'https://mp.weixin.qq.com/s/qxEbeAlE3sbET4252JEHEg'})
+    count.append({'id':4,'title':'【Psy.Cheese第二弹】赠人玫瑰，不care手留不留余香？','time':'2019.4.20','image':'https://xinyujiang.cn/media/paper/image/4.jpg','src':'https://mp.weixin.qq.com/s/Nnm8OunFfHROJK283OS_IQ'})
+    count.append({'id':5,'title':'杜蕾斯“老司机”终翻车：那些被性压抑的中国人','time':'2019.4.25','image':'https://xinyujiang.cn/media/paper/image/5.jpg','src':'https://mp.weixin.qq.com/s/ckAq9iOEDc8CbHi6go8vmA'})
+    count.append({'id':6,'title':'【Psy. Cheese第三弹】听说成绩好的人都是书呆子？','time':'2019.4.30','image':'https://xinyujiang.cn/media/paper/image/6.jpg','src':'https://mp.weixin.qq.com/s/YIcvFt79VE6c8sEJIgYhkQ'})
+    count.append({'id':7,'title':'偷窥漫威粉丝的聊天记录：他们竟是这样看待剧透的','time':'2019.5.6','image':'https://xinyujiang.cn/media/paper/image/7.jpg','src':'https://mp.weixin.qq.com/s/GUpA-4SRfFy43fRnJUA88A'})
+    count.append({'id':8,'title':'【Psy. Cheese第四弹】考试恐怖事件TOP1：老师在背后盯着你看','time':'2019.5.24','image':'https://xinyujiang.cn/media/paper/image/8.jpg','src':'https://mp.weixin.qq.com/s/8cdOPjls-3Lwlk4TK_oB0g'})
+    count.append({'id':9,'title':'明明吃饱了，却还想吃点啥','time':'2019.6.3','image':'https://xinyujiang.cn/media/paper/image/9.jpg','src':'https://mp.weixin.qq.com/s/-QFCsYOhEONUyEDaK0_GZw'})
+    count.append({'id':10,'title':'【Hack.Cheese】高级算命？AI+心理学可以擦出哪些火花？','time':'2019.6.10','image':'https://xinyujiang.cn/media/paper/image/10.jpg','src':'https://mp.weixin.qq.com/s/2wls4rZ7cdW1l13cNnWuJw'})    
     code = '0'
     result = {"code": code, "msg": "get paperlist successful", "data": count}
     return HttpResponse(json.dumps(result))
@@ -587,4 +612,296 @@ def dailyrecommend(request):
     
     code = '0'
     result = {"code": code, "msg": "get dailyrecommend successful", "data": count}
+    return HttpResponse(json.dumps(result))
+
+
+#返回用户文本生成的词云信息
+@csrf_exempt
+def getwordcloud(request):
+    #print(request.GET["user_id"])
+    if "user_id" not in request.GET:
+        return HttpResponse(json.dumps({"code":-1, "msg":"unexpected params!", "data":[]}))
+
+    muser = Userinfo.objects.get(id=request.GET['user_id'])
+    #print(mtext)
+    #print(muser.id)
+    fname = "/home/ubuntu/.local/lib/python3.5/site-packages/matplotlib/mpl-data/fonts/ttf/simhei.TTF"
+    myfont = FontProperties(fname=fname)
+    mspeechinfo = Speechinfo.objects.filter(user=muser)
+    text = ""
+    for item in mspeechinfo:
+        #print(item.text)
+        text += item.text
+
+    msg = "success establish wordcloud"
+    code = 0
+    if len(mspeechinfo) == 0:
+        msg = "no text"
+        code = 1
+    #print(msg,code)
+
+    def stop_words(texts):
+        words_list = []
+        word_generator = jieba.cut(texts, cut_all=False)  # 返回的是一个迭代器
+        with open('/home/ubuntu/data/哈工大停用词表.txt') as f:
+            str_text = f.read()
+            f.close()  # stopwords文本中词的格式是'一词一行'
+        for word in word_generator:
+            if word.strip() not in str_text:
+                words_list.append(word)
+        return ' '.join(words_list)  # 注意是空格
+
+    if code == 0:
+
+        back_color = imread('/home/ubuntu/program/Psybot_backend/media/wordcloud_bg2.png')  # 解析该图片
+
+        wc = WordCloud(background_color='white',  # 背景颜色
+                       max_words=1000,  # 最大词数
+                       mask=back_color,  # 以该参数值作图绘制词云，这个参数不为空时，width和height会被忽略
+                       max_font_size=100,  # 显示字体的最大值
+                       #stopwords=STOPWORDS.add('苟利国'),  # 使用内置的屏蔽词，再添加'苟利国'
+                       font_path="/home/ubuntu/.local/lib/python3.5/site-packages/matplotlib/mpl-data/fonts/ttf/simhei.ttf",  # 解决显示口字型乱码问题，可进入C:/Windows/Fonts/目录更换字体
+                       random_state=42,  # 为每个词返回一个PIL颜色
+                       # width=1000,  # 图片的宽
+                       # height=860  #图片的长
+                       )
+        # WordCloud各含义参数请点击 wordcloud参数
+
+        # 添加自己的词库分词，比如添加'金三胖'到jieba词库后，当你处理的文本中含有金三胖这个词，
+        # 就会直接将'金三胖'当作一个词，而不会得到'金三'或'三胖'这样的词
+        #jieba.add_word('金三胖')
+
+        # 该函数的作用就是把屏蔽词去掉，使用这个函数就不用在WordCloud参数中添加stopwords参数了
+        # 把你需要屏蔽的词全部放入一个stopwords文本文件里即可
+        
+
+        text = stop_words(text)
+
+        wc.generate(text)
+        # 基于彩色图像生成相应彩色
+        image_colors = ImageColorGenerator(back_color)
+        # 显示图片
+        plt.imshow(wc)
+        # 关闭坐标轴
+        plt.axis('off')
+        # 绘制词云
+        plt.figure()
+        plt.imshow(wc.recolor(color_func=image_colors))
+        plt.axis('off')
+        # 保存图片
+        name=time.strftime('%Y%m%d%H%M%S_',time.localtime(time.time()))+request.GET['user_id']
+        wc.to_file("./media/temp/wordcloud/"+name+".png")
+
+        #return HttpResponse(json.dumps({"code":0,"msg":"success","data":{"url":"https://xinyujiang.cn/media/temp/efficient/"+name+".png"}}))
+        return HttpResponse(json.dumps({"code":code,"msg":msg,"data": {"url":"https://xinyujiang.cn/media/temp/wordcloud/"+name+".png"}}))
+
+    return HttpResponse(json.dumps({"code":code,"msg":msg,"data": {}}))
+
+#存储用户测试分数
+@csrf_exempt
+def settestgrade(request):
+    mgrade = request.GET['grade']
+    print(mgrade)
+    muser = Userinfo.objects.get(id=request.GET['user_id'])
+    print("user",muser)
+    if int(mgrade) > 32 or int(mgrade) < -8:
+        print("存储失败")
+        code = '1'
+        msg = "测试数据不合法！存储失败"
+    else:
+        print("存储成功")
+        msg = "success store test grade for user:" + request.GET['user_id']
+        mtest = Test_situation(user=muser, test_grade=mgrade)
+        print(mtest)
+        mtest.save()
+        print("测试存储成功")
+        code = '0'
+
+    result = {"code": code, "msg": msg, "data": []}
+    return HttpResponse(json.dumps(result))
+
+
+#得到用户测试分数
+@csrf_exempt
+def gettestgrade(request):
+    if "user_id" not in request.GET:
+        return HttpResponse(json.dumps({"code":-1, "msg":"unexpected params!", "data":[]}))
+    # info = Emotioninfo.objects.filter(user_id=request.GET['user_id']).values('create_time','efficient')
+    info = Test_situation.objects.filter(user_id=request.GET['user_id'], test_grade__gte=-8,test_grade__lte=32).values('create_time').annotate(avg=Avg('test_grade')).values('create_time','avg')
+    print("info",info)
+    rt_list=[[rst['create_time'].strftime("%Y-%m-%d"), rst['avg']] for rst in info]
+    return HttpResponse(json.dumps({"code":0,"msg":"success","data":rt_list}))
+
+#得到人员简历
+@csrf_exempt
+def getresume(request):
+    rt_list = []
+    rt_list.append({'name':'lxs_1','url':'https://xinyujiang.cn/media/resume/lxs_1.png'})
+    rt_list.append({'name':'lxs_2','url':'https://xinyujiang.cn/media/resume/lxs_2.png'})
+    return HttpResponse(json.dumps({"code":0,"msg":"success","data":rt_list}))
+
+
+#返回hash后的Userid
+@csrf_exempt
+def gethashuserid(request):
+    #print(request.GET["user_id"])
+
+    if "openid" not in request.GET:
+        return HttpResponse(json.dumps({"code":-1, "msg":"unexpected params!", "data":[]}))
+    mopenid = request.GET['openid']
+    muser = Userinfo.objects.get(openid=mopenid)
+    hashid = (muser.hashid)
+    code = '0'
+    result = {"code": code, "msg": "success", "data": hashid}
+    return HttpResponse(json.dumps(result))
+
+##########################以下为chatbot接口#####################################
+##把这个部分单独开一个应用比较好
+#
+#from django.shortcuts import render
+#
+## Create your views here.
+#import datetime
+#import os
+#import random
+#import time
+#
+#import sys
+#import random
+#import pickle
+#import numpy as np
+#import pandas as pd
+#import math
+#from math import *
+#import jieba
+#from snownlp import SnowNLP
+#import json
+#
+#from django.db.models import Avg
+#from django.http import HttpResponse
+#from django.views.decorators.csrf import csrf_exempt
+#from psybot.models import Userinfo, Activityinfo, Speechinfo, Emotioninfo, Mingxianginfo, Opinioninfo, Test_situation
+#from psybot.utils.NlpUtils import *
+#from psybot.utils.OpenidUtils import *
+#from psybot.utils.Const import *
+#
+#import tensorflow as tf
+#
+#sys.path.append('..')
+#sys.path.append('/home/ubuntu/program/Psybot_backend/chatbot_model')
+#
+#from sequence_to_sequence import SequenceToSequence
+#from data_utils import batch_flow
+#from word_sequence import WordSequence # pylint: disable=unused-variable
+#
+#random.seed(0)
+#np.random.seed(0)
+#tf.compat.v1.set_random_seed(0)
+#
+#"""测试不同参数在生成的假数据上的运行结果"""
+#
+#model_path = "/home/ubuntu/program/Psybot_backend/chatbot_model/"
+#
+#bidirectional=True
+#cell_type='lstm'
+#depth=2
+#attention_type='Bahdanau'
+#use_residual=False
+#use_dropout=False
+#time_major=False
+#hidden_units=512
+#
+#x_data, _, ws = pickle.load(open(model_path + 'chatbot.pkl', 'rb'))
+#
+#for x in x_data[:5]:
+#    print(' '.join(x))
+#
+#config = tf.ConfigProto(
+#        device_count={'CPU': 1, 'GPU': 0},
+#        allow_soft_placement=True,
+#        log_device_placement=False
+#    )
+#
+## save_path = '/tmp/s2ss_chatbot.ckpt'
+#save_path = '/home/ubuntu/program/Psybot_backend/chatbot_model/s2ss_chatbot.ckpt'
+#
+## 测试部分
+#tf.reset_default_graph()
+#model_pred = SequenceToSequence(
+#        input_vocab_size=len(ws),
+#        target_vocab_size=len(ws),
+#        batch_size=1,
+#        mode='decode',
+#        beam_width=0,
+#        bidirectional=bidirectional,
+#        cell_type=cell_type,
+#        depth=depth,
+#        attention_type=attention_type,
+#        use_residual=use_residual,
+#        use_dropout=use_dropout,
+#        parallel_iterations=1,
+#        time_major=time_major,
+#        hidden_units=hidden_units,
+#        share_embedding=True,
+#        pretrained_embedding=True
+#)
+#init = tf.global_variables_initializer()
+#
+#sess = tf.Session(config=config)
+##with tf.Session(config=config) as sess:
+#sess.run(init)
+#model_pred.load(sess, save_path)
+#
+## 建立用户本次交流的情绪信息表
+#@csrf_exempt
+#def chat(request):
+#    user_text = request.GET['text']
+#    x_test = [jieba.lcut(user_text.lower())]
+#    # x_test = [word_tokenize(user_text)]
+#    bar = batch_flow([x_test], ws, 1)
+#    x, xl = next(bar)
+#    x = np.flip(x, axis=1)
+#    # x = np.array([
+#    #     list(reversed(xx))
+#    #     for xx in x
+#    # ])
+#    pred = model_pred.predict(
+#        sess,
+#        np.array(x),
+#        np.array(xl)
+#    )
+#    ans = "".join(ws.inverse_transform(pred[0]))
+#    print(ans[:-4])
+#
+#
+#    code = '0'
+#    result = {"code": code, "msg": "success", "data": [ans]}
+#    return HttpResponse(json.dumps(result))
+#
+##########################以上为chatbot接口#####################################
+
+#意见反馈接口FOR涛哥
+@csrf_exempt
+def setopinion2(request):
+    mtext = request.GET['text']
+    muser = request.GET['username']
+    mtitle = request.GET['title']
+    #print(mtext)
+    mopinioninfo = OpinioninfoForSRT(user=muser, text=mtext, title=mtitle)
+    mopinioninfo.save()
+    print("文本存储成功")
+    code = '0'
+    result = {"code": code, "msg": "store tao's opinion successful", "data": []}
+    return HttpResponse(json.dumps(result))
+
+
+#得到用户输入的所有意见FOR涛哥
+@csrf_exempt
+def getopinion2(request):
+    mopinion = OpinioninfoForSRT.objects.all()
+    rt = []
+    for i in mopinion:
+        rt.append({'text':i.text, 'title':i.title, 'user':i.user})
+    code = '0'
+    result = {"code": code, "msg": "get opinion successful", "data": rt}
     return HttpResponse(json.dumps(result))

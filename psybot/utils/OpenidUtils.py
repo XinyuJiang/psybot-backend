@@ -17,5 +17,6 @@ class OpenidUtils(object):
         r = requests.get(url)
         print(r.json())
         openid = r.json()['openid']
+        session_key = r.json()['session_key']
 
-        return openid
+        return openid,session_key

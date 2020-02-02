@@ -24,4 +24,13 @@ urlpatterns = [
     path('paper_list/', views.paper_list, name='paper_list'),
     path('mingxiang_list/', views.mingxiang_list, name='mingxiang_list'),
     path('dailyrecommend/', views.dailyrecommend, name='dailyrecommend'),
+    path('getwordcloud/', views.getwordcloud, name='getwordcloud'),
+    path('settestgrade/', views.settestgrade, name='settestgrade'),
+    path('gettestgrade/', views.gettestgrade, name='gettestgrade'),
+    path('getresume/', views.getresume, name='getresume'),
+    path('gethashuserid/', views.gethashuserid, name='gethashuserid'),
+    path('setopinion2/', views.setopinion2, name='setopinion2'),
+    path('getopinion2/', views.getopinion2, name='getopinion2'),
+
+#    path('chat/', views.chat, name='chat'),
 ]
